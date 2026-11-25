@@ -8,7 +8,7 @@
 # sir yo'q.
 set -o errexit
 
-: "${DEPLOY_KEY_B64:?DEPLOY_KEY_B64 env var kerak (Render → Environment)}"
+: "${DEPLOY_KEY_B64:?DEPLOY_KEY_B64 env var kerak (Render -> Environment)}"
 
 mkdir -p "$HOME/.ssh"
 printf '%s' "$DEPLOY_KEY_B64" | base64 -d > "$HOME/.ssh/barberflow_deploy"
