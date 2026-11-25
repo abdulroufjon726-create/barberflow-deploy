@@ -6,6 +6,9 @@
 # faqat deploy key bilan clone qilib, oddiy Django build'ini bajaradi.
 # Kalit Render'ning DEPLOY_KEY_B64 env var'ida turadi, repo'da hech qanday
 # sir yo'q.
+#
+# Baza ishlari (migrate, seed_demo) bu yerda emas — ular start buyrug'ida
+# bajariladi. Shunday qilib tunnel vaqtincha uzilib qolsa ham build yiqilmaydi.
 set -o errexit
 
 : "${DEPLOY_KEY_B64:?DEPLOY_KEY_B64 env var kerak (Render -> Environment)}"
@@ -22,10 +25,4 @@ git clone --depth 1 git@github.com:abdulroufjon726-create/barberflow-app.git app
 cd app/backend
 pip install --upgrade pip
 pip install -r requirements.txt
-
 python manage.py collectstatic --noinput
-python manage.py migrate --noinput
-
-if [ "${SEED_DEMO:-1}" = "1" ]; then
-  python manage.py seed_demo
-fi
