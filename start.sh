@@ -58,13 +58,21 @@ if ! "$TS_DIR/tailscale" --socket="$TS_DIR/sock" status >/dev/null 2>&1; then
   done
 fi
 
-: "${TS_AUTHKEY:?TS_AUTHKEY env var kerak (Render -> Environment)}"
-"$TS_DIR/tailscale" --socket="$TS_DIR/sock" up \
-  --authkey="$TS_AUTHKEY" \
-  --hostname="${TS_HOSTNAME:-render-barberflow}" \
-  --accept-dns=false \
-  --accept-routes=false ||
-  echo "[start] OGOHLANTIRISH: 'tailscale up' xato qaytardi, davom etamiz"
+# Tailscale telefon bazasi uchun kerak. U bo'lmasa ham API (asosiy baza — Render)
+# ishlashi kerak, shuning uchun kalit yo'qligi deploy'ni to'xtatmaydi.
+if [ -n "${TS_AUTHKEY:-}" ]; then
+  # --ephemeral: konteyner o'chsa tugun tailnet'dan o'zi o'chadi (eski nusxalar
+  # to'planib qolmaydi).
+  "$TS_DIR/tailscale" --socket="$TS_DIR/sock" up \
+    --authkey="$TS_AUTHKEY" \
+    --hostname="${TS_HOSTNAME:-render-barberflow}" \
+    --ephemeral \
+    --accept-dns=false \
+    --accept-routes=false ||
+    echo "[start] OGOHLANTIRISH: 'tailscale up' xato qaytardi, davom etamiz"
+else
+  echo "[start] OGOHLANTIRISH: TS_AUTHKEY yo'q — telefon bazasi (tailnet) ishlamaydi, asosiy baza ishlatiladi"
+fi
 
 TS_IP=""
 for _ in $(seq 1 60); do
@@ -75,7 +83,33 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 echo "[start] tailnet IP: ${TS_IP:-topilmadi}"
-"$TS_DIR/tailscale" --socket="$TS_DIR/sock" status || true
+
+# DB_TAILNET_HOST IP bo'lmasa (masalan `barber-phone`), tailnet nomidan IP'ni
+# aniqlaymiz: telefon qayta qo'shilib IP o'zgarsa ham sozlama ishlayveradi.
+case "$DB_TAILNET_HOST" in
+  "" | *[!0-9.]*) 
+    RESOLVED="$("$TS_DIR/tailscale" --socket="$TS_DIR/sock" ip -4 "$DB_TAILNET_HOST" 2>/dev/null | head -n1 || true)"
+    if [ -n "$RESOLVED" ]; then
+      echo "[start] ${DB_TAILNET_HOST} -> ${RESOLVED} (tailnet nomidan aniqlandi)"
+      DB_TAILNET_HOST="$RESOLVED"
+      export DB_TAILNET_HOST
+    else
+      echo "[start] OGOHLANTIRISH: ${DB_TAILNET_HOST} tailnet'da topilmadi"
+    fi
+    ;;
+esac
+
+# Peer ro'yxati: telefon tuguni onlinemi — logdan darhol ko'rinadi.
+TS_STATUS="$("$TS_DIR/tailscale" --socket="$TS_DIR/sock" status 2>&1 | head -n 20 || true)"
+printf '%s\n' "$TS_STATUS"
+PHONE_LINE="$(printf '%s\n' "$TS_STATUS" | awk -v ip="$DB_TAILNET_HOST" '$1==ip' | head -n1)"
+case "$PHONE_LINE" in
+  *offline*) PHONE_STATE="offline" ;;
+  *active* | *idle*) PHONE_STATE="online" ;;
+  "") PHONE_STATE="topilmadi" ;;
+  *) PHONE_STATE="noma'lum" ;;
+esac
+echo "[start] telefon bazasi manzili: ${DB_TAILNET_HOST}:${DB_TAILNET_PORT} (${PHONE_STATE})"
 "$TS_DIR/tailscale" --socket="$TS_DIR/sock" ping -c 2 --timeout=5s "$DB_TAILNET_HOST" ||
   echo "[start] OGOHLANTIRISH: ${DB_TAILNET_HOST} ping javob bermadi"
 
