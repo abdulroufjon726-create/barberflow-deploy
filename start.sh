@@ -15,6 +15,8 @@ TS_VERSION="${TS_VERSION:-1.104.7}"
 TS_DIR="${TS_DIR:-/tmp/ts}"
 SOCKS_PORT="${SOCKS_PORT:-1055}"
 RELAY_PORT="${RELAY_PORT:-15432}"
+# Django health'dagi telefon-baza probe'i shu port orqali yuradi.
+export TS_SOCKS_PORT="${TS_SOCKS_PORT:-$SOCKS_PORT}"
 DB_TAILNET_HOST="${DB_TAILNET_HOST:-100.91.30.56}"
 DB_TAILNET_PORT="${DB_TAILNET_PORT:-5434}"
 
