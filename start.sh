@@ -93,18 +93,23 @@ cd app/backend
 
 python - <<'PY' || true
 import os
-import psycopg2
+
+params = dict(
+    host=os.environ.get("DB_HOST", "127.0.0.1"),
+    port=int(os.environ.get("DB_PORT", "15432")),
+    dbname=os.environ.get("DB_NAME", "barberflow"),
+    user=os.environ.get("DB_USER", "barber"),
+    password=os.environ.get("DB_PASSWORD", ""),
+    sslmode=os.environ.get("DB_SSLMODE", "disable"),
+    connect_timeout=15,
+)
 
 try:
-    conn = psycopg2.connect(
-        host=os.environ.get("DB_HOST", "127.0.0.1"),
-        port=int(os.environ.get("DB_PORT", "15432")),
-        dbname=os.environ.get("DB_NAME", "barberflow"),
-        user=os.environ.get("DB_USER", "barber"),
-        password=os.environ.get("DB_PASSWORD", ""),
-        sslmode=os.environ.get("DB_SSLMODE", "disable"),
-        connect_timeout=15,
-    )
+    try:
+        import psycopg as driver
+    except ImportError:
+        import psycopg2 as driver
+    conn = driver.connect(**params)
     cur = conn.cursor()
     cur.execute("select version()")
     print("[start] PG ulanish OK:", cur.fetchone()[0][:70])
