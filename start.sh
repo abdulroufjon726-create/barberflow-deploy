@@ -133,4 +133,11 @@ fi
 
 python manage.py seed_demo || echo "[start] seed_demo xato qaytardi"
 
+# Telegram bot (long polling) va eslatma yuboruvchi — daphne bilan birga fonda.
+if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
+  echo "[start] Telegram bot va notifier ishga tushirilmoqda"
+  nohup python manage.py run_bot >>/tmp/telegram-bot.log 2>&1 &
+  nohup python manage.py run_notifier >>/tmp/telegram-notifier.log 2>&1 &
+fi
+
 exec daphne -b 0.0.0.0 -p "${PORT:-8000}" config.asgi:application
