@@ -123,8 +123,11 @@ export DB_SSLMODE="${DB_SSLMODE:-disable}"
 
 cd app/backend
 
-python - <<'PY' || true
+# Baza tirikmi? 3 urinish — telefon uyg'onishi sekin bo'lishi mumkin.
+db_probe() {
+  python - <<'PY'
 import os
+import sys
 
 params = dict(
     host=os.environ.get("DB_HOST", "127.0.0.1"),
@@ -148,7 +151,39 @@ try:
     conn.close()
 except Exception as exc:  # noqa: BLE001 - diagnostika uchun
     print("[start] PG ulanish XATO:", repr(exc))
+    sys.exit(1)
 PY
+}
+
+DB_OK=0
+for attempt in 1 2 3; do
+  if db_probe; then
+    DB_OK=1
+    break
+  fi
+  if [ "$attempt" != "3" ]; then
+    echo "[start] baza javob bermadi (${attempt}/3), 8s kutamiz"
+    sleep 8
+  fi
+done
+
+# Telefon bazasi rejimida (DB_HOST=127.0.0.1 -> relay) baza javob bermasa, API
+# yiqilib qolmasin: DB_* olib tashlanadi va Django `DATABASE_URL` (Render PG)
+# ga qaytadi. Telefon keyin qaytsa — env'dagi manzil o'z-o'zidan ishlatiladi.
+PHONE_MODE=0
+case "${DB_HOST}" in
+  127.0.0.1 | localhost) PHONE_MODE=1 ;;
+esac
+
+if [ "$DB_OK" != "1" ] && [ "$PHONE_MODE" = "1" ] && [ -n "${DATABASE_URL:-}" ]; then
+  echo "[start] OGOHLANTIRISH: telefon bazasi ishlamayapti — asosiy (Render) bazaga avtomatik qaytildi"
+  unset DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD DB_SSLMODE
+  if db_probe; then
+    DB_OK=1
+  else
+    echo "[start] XATO: asosiy baza ham javob bermadi"
+  fi
+fi
 
 migrated=0
 for attempt in 1 2 3 4 5; do
