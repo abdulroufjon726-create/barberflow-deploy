@@ -61,12 +61,10 @@ fi
 # Tailscale telefon bazasi uchun kerak. U bo'lmasa ham API (asosiy baza — Render)
 # ishlashi kerak, shuning uchun kalit yo'qligi deploy'ni to'xtatmaydi.
 if [ -n "${TS_AUTHKEY:-}" ]; then
-  # --ephemeral: konteyner o'chsa tugun tailnet'dan o'zi o'chadi (eski nusxalar
-  # to'planib qolmaydi).
+  # Diqqat: tailscale 1.104 `up` da --ephemeral yo'q — uni qo'shilsa up yiqiladi.
   "$TS_DIR/tailscale" --socket="$TS_DIR/sock" up \
     --authkey="$TS_AUTHKEY" \
     --hostname="${TS_HOSTNAME:-render-barberflow}" \
-    --ephemeral \
     --accept-dns=false \
     --accept-routes=false ||
     echo "[start] OGOHLANTIRISH: 'tailscale up' xato qaytardi, davom etamiz"
