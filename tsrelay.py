@@ -12,9 +12,16 @@ import socket
 import struct
 import sys
 import threading
+import time
 
 SOCKS_HOST = "127.0.0.1"
 SOCKS_PORT = 1055
+
+# Xato log'i: telefon o'chgan paytda har bir urinish alohida qator yozib log'ni
+# to'ldirib yubormasin. Birinchi xato darhol, keyingilari daqiqada ko'pi bilan
+# bir marta (nechta urinish yiqilgani bilan birga) chiqadi.
+_FAIL_LOG = {"at": 0.0, "count": 0, "shown": ""}
+_FAIL_QUIET_SECONDS = 60.0
 
 
 def read_exact(sock, size):
@@ -67,13 +74,33 @@ def pump(src, dst):
                 pass
 
 
+def log_failure(exc):
+    line = "[relay] ulanmadi: %r" % (exc,)
+    now = time.monotonic()
+    if line == _FAIL_LOG["shown"] and now - _FAIL_LOG["at"] < _FAIL_QUIET_SECONDS:
+        _FAIL_LOG["count"] += 1
+        return
+    suffix = ""
+    if _FAIL_LOG["count"]:
+        suffix = " (+%d ta oldingi urinish)" % _FAIL_LOG["count"]
+    print(line + suffix, flush=True)
+    _FAIL_LOG.update(at=now, count=0, shown=line)
+
+
+def log_recovery():
+    if _FAIL_LOG["shown"]:
+        print("[relay] ulanish tiklandi", flush=True)
+        _FAIL_LOG.update(at=0.0, count=0, shown="")
+
+
 def handle(client, host, port):
     try:
         upstream = socks_connect(host, port)
     except Exception as exc:  # noqa: BLE001 - relay hech qachon yiqilmasin
-        print("[relay] ulanmadi: %r" % (exc,), flush=True)
+        log_failure(exc)
         client.close()
         return
+    log_recovery()
     threading.Thread(target=pump, args=(client, upstream), daemon=True).start()
     pump(upstream, client)
 
