@@ -47,7 +47,7 @@ fetch_tailscale() {
 }
 
 if [ "$PHONE_MODE" != "1" ]; then
-  echo "[start] telefon bazasi ishlatilmayapti (DB_HOST=${DB_HOST:-belgilanmagan}) — tailscale/relay o'tkazib yuborildi"
+  echo "[start] telefon bazasi ishlatilmayapti (DB_HOST=${DB_HOST:-belgilanmagan}) - tailscale/relay o'tkazib yuborildi"
 else
 
 if [ ! -x "$TS_DIR/tailscaled" ]; then
