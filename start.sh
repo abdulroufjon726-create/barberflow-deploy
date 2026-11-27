@@ -20,6 +20,14 @@ export TS_SOCKS_PORT="${TS_SOCKS_PORT:-$SOCKS_PORT}"
 DB_TAILNET_HOST="${DB_TAILNET_HOST:-100.91.30.56}"
 DB_TAILNET_PORT="${DB_TAILNET_PORT:-5434}"
 
+# Telefon bazasi rejimi faqat DB_HOST loopback bo'lganda kerak. Asosiy (Render)
+# bazada tailscale/relay umuman ko'tarilmaydi: har sovuq startda ular ~70 soniya
+# yeb qo'yardi (auth, peer ro'yxati, ping).
+PHONE_MODE=0
+case "${DB_HOST:-}" in
+  127.0.0.1 | localhost) PHONE_MODE=1 ;;
+esac
+
 mkdir -p "$TS_DIR"
 
 fetch_tailscale() {
@@ -37,6 +45,10 @@ fetch_tailscale() {
   cp "$dir/tailscaled" "$dir/tailscale" "$TS_DIR"/
   chmod +x "$TS_DIR/tailscaled" "$TS_DIR/tailscale"
 }
+
+if [ "$PHONE_MODE" != "1" ]; then
+  echo "[start] telefon bazasi ishlatilmayapti (DB_HOST=${DB_HOST:-belgilanmagan}) — tailscale/relay o'tkazib yuborildi"
+else
 
 if [ ! -x "$TS_DIR/tailscaled" ]; then
   fetch_tailscale
@@ -116,12 +128,13 @@ echo "[start] telefon bazasi manzili: ${DB_TAILNET_HOST}:${DB_TAILNET_PORT} (${P
 echo "[start] relay ishga tushirilmoqda: 127.0.0.1:${RELAY_PORT} -> ${DB_TAILNET_HOST}:${DB_TAILNET_PORT}"
 python tsrelay.py "127.0.0.1:${RELAY_PORT}" "${DB_TAILNET_HOST}:${DB_TAILNET_PORT}" &
 RELAY_PID=$!
-export RELAY_PID
 trap 'kill "$RELAY_PID" 2>/dev/null || true' EXIT
 
 export DB_HOST="${DB_HOST:-127.0.0.1}"
 export DB_PORT="${DB_PORT:-$RELAY_PORT}"
 export DB_SSLMODE="${DB_SSLMODE:-disable}"
+
+fi  # PHONE_MODE
 
 cd app/backend
 
@@ -172,11 +185,6 @@ done
 # Telefon bazasi rejimida (DB_HOST=127.0.0.1 -> relay) baza javob bermasa, API
 # yiqilib qolmasin: DB_* olib tashlanadi va Django `DATABASE_URL` (Render PG)
 # ga qaytadi. Telefon keyin qaytsa — env'dagi manzil o'z-o'zidan ishlatiladi.
-PHONE_MODE=0
-case "${DB_HOST}" in
-  127.0.0.1 | localhost) PHONE_MODE=1 ;;
-esac
-
 if [ "$DB_OK" != "1" ] && [ "$PHONE_MODE" = "1" ] && [ -n "${DATABASE_URL:-}" ]; then
   echo "[start] OGOHLANTIRISH: telefon bazasi ishlamayapti — asosiy (Render) bazaga avtomatik qaytildi"
   unset DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD DB_SSLMODE
@@ -201,6 +209,30 @@ if [ "$migrated" != "1" ]; then
 fi
 
 python manage.py seed_demo || echo "[start] seed_demo xato qaytardi"
+
+# Self keep-alive: Render bepul rejimi 15 daqiqa kiruvchi trafik bo'lmasa konteyner
+# uxlaydi (keyingi so'rov ~1 daqiqa kutadi). Har 10 daqiqada o'z health'imizni
+# urib turamiz — shunda API uxlab qolmaydi. GitHub cron'iga bog'liq emas.
+KEEPALIVE_URL="${KEEPALIVE_URL:-}"
+if [ -n "$KEEPALIVE_URL" ]; then
+  KEEPALIVE_INTERVAL="${KEEPALIVE_INTERVAL:-600}"
+  echo "[start] keep-alive: har ${KEEPALIVE_INTERVAL}s -> ${KEEPALIVE_URL%/}/api/health/"
+  (
+    failures=0
+    while sleep "$KEEPALIVE_INTERVAL"; do
+      if curl -fsS -m 30 -o /dev/null "${KEEPALIVE_URL%/}/api/health/" 2>/dev/null; then
+        failures=0
+      else
+        failures=$((failures + 1))
+        if [ "$failures" -ge 3 ]; then
+          echo "[keepalive] OGOHLANTIRISH: health javob bermayapti (${failures} urinish)"
+        fi
+      fi
+    done
+  ) &
+else
+  echo "[start] keep-alive o'chirilgan (KEEPALIVE_URL yo'q) — bepul rejimda servis uxlab qolishi mumkin"
+fi
 
 # Telegram bot (long polling) va eslatma yuboruvchi — daphne bilan birga fonda.
 if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
